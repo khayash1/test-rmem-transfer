@@ -71,10 +71,11 @@ static void test_memory_init(u32 *src, u32 *fix, u32 *dst, int len)
 {
 	int i;
 
-	for (i = 0; i < len; i+=4)
+	for (i = 0; i < len; i += 4) {
 		*src++ = get_random_u32();
-	memset(fix, 0, len);
-	memset(dst, 0, len);
+		*fix++ = get_random_u32();
+		*dst++ = get_random_u32();
+	}
 }
 
 static int test_rmem_trasnfer_probe(struct platform_device *pdev)
