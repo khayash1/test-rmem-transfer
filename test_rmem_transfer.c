@@ -19,6 +19,10 @@ static unsigned int test_buf_size = 16384;
 module_param(test_buf_size, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(test_buf_size, "Size of the memcpy test buffer");
 
+static unsigned int test_type = 3;
+module_param(test_type, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(test_type, "Type of test (1=dma only, 2=cpu only, 3=both");
+
 static int test_memcpy_dma(struct device *dev,
 			   dma_addr_t dst, dma_addr_t src, size_t len)
 {
@@ -133,6 +137,9 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+	if (!(test_type & 1))
+		goto test_dma_exit;
+
 	/* init for test DMA */
 	test_memory_init(src_addr, fixmem_addr, dst_addr, len);
 
@@ -140,7 +147,7 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	ret = test_memcpy_dma(dev, fixmem_paddr, src_paddr, len);
 	if (ret) {
 		dev_err(dev, "Failed to transfer src->fix\n");
-		return ret;
+		goto test_dma_exit;
 	}
 	crc1 = crc32_le(0, src_addr, len);
 	crc2 = crc32_le(0, fixmem_addr, len);
@@ -151,12 +158,17 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	ret = test_memcpy_dma(dev, dst_paddr, fixmem_paddr, len);
 	if (ret) {
 		dev_err(dev, "Failed to transfer fix->dst\n");
-		return ret;
+		goto test_dma_exit;
 	}
 	crc1 = crc32_le(0, fixmem_addr, len);
 	crc2 = crc32_le(0, dst_addr, len);
 	dev_info(dev, "DMA: fix:%llx -> dst:%llx %s\n", fixmem_paddr, dst_paddr,
 		 (crc1 == crc2) ? "OK" : "NG");
+
+ test_dma_exit:
+
+	if (!(test_type & 2))
+		goto test_cpu_exit;
 
 	/* init for test CPU */
 	test_memory_init(src_addr, fixmem_addr, dst_addr, len);
@@ -175,6 +187,7 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	dev_info(dev, "CPU: fix:%llx -> dst:%llx %s\n", fixmem_paddr, dst_paddr,
 		 (crc1 == crc2) ? "OK" : "NG");
 
+ test_cpu_exit:
 	return 0;
 }
 
