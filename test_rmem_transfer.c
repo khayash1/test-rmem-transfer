@@ -70,6 +70,12 @@ out:
 	return NULL;
 }
 
+static void test_rmem_free_fix_memory(struct device *dev)
+{
+	of_reserved_mem_device_release(dev);
+	device_unregister(dev);
+}
+
 static int test_memcpy_dma(struct dma_chan *chan,
 			   dma_addr_t dst, dma_addr_t src, size_t len)
 {
@@ -228,11 +234,9 @@ out_free_dst:
 out_free_src:
 	dma_free_coherent(rsvmem_dev, len, src_addr, src_paddr);
 out_unreg_fixmem:
-	of_reserved_mem_device_release(fixmem_dev);
-	device_unregister(fixmem_dev);
+	test_rmem_free_fix_memory(fixmem_dev);
 out_unreg_rsvmem:
-	of_reserved_mem_device_release(rsvmem_dev);
-	device_unregister(rsvmem_dev);
+	test_rmem_free_fix_memory(rsvmem_dev);
 out_release_chan:
 	dma_release_channel(chan);
 
