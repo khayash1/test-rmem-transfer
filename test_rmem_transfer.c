@@ -139,7 +139,7 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	chan = dma_request_channel(mask, NULL, NULL);
 	if (!chan) {
 		dev_err(dev, "Failed to request dma channel\n");
-		return -ENODEV;
+		return -EPROBE_DEFER;
 	}
 	chan_dev = dmaengine_get_dma_device(chan);
 
