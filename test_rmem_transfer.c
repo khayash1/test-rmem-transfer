@@ -56,8 +56,6 @@ static struct device *test_rmem_alloc_fix_memory(struct device *dev,
 	if (!child->dma_parms)
 		goto out;
 
-	of_dma_configure(child, dev->of_node, true);
-
 	if (!device_add(child)) {
 		ret = of_reserved_mem_device_init_by_idx(child, dev->of_node, idx);
 		if (!ret)
