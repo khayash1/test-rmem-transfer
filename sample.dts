@@ -9,11 +9,6 @@
 		#size-cells = <2>;
 		ranges;
 
-		reserved_dma: memory@e0000000 {
-			reg = <0 0xe0000000 0 0x00100000>;
-			no-map;
-		};
-
 		reserved_sram: memory@ff000000 {
 			reg = <0 0xff000000 0 0x00100000>;
 			no-map;
@@ -22,6 +17,6 @@
 
 	test-rmem-transfer {
 		compatible = "test-rmem-transfer";
-		memory-region = <&reserved_dma>, <&reserved_sram>;
+		memory-region = <&reserved_sram>;
 	};
 };

@@ -120,7 +120,7 @@ static void test_memory_init(u32 *src, u32 *fix, u32 *dst, int len)
 static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device *chan_dev, *rsvmem_dev, *fixmem_dev;
+	struct device *chan_dev, *fixmem_dev;
 	struct dma_chan *chan;
 	void *src_addr, *fixmem_addr, *dst_addr;
 	dma_addr_t src_paddr, fixmem_paddr, dst_paddr;
@@ -141,29 +141,21 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	}
 	chan_dev = dmaengine_get_dma_device(chan);
 
-	/* Reserved DRAM */
-	rsvmem_dev = test_rmem_alloc_fix_memory(dev, chan_dev, "test-rmem-resv", 0);
-	if (!rsvmem_dev) {
+	/* Fixed memory */
+	fixmem_dev = test_rmem_alloc_fix_memory(dev, chan_dev, "test-rmem-fixed", 0);
+	if (!fixmem_dev) {
 		dev_err(dev, "No memory-region found for index 0\n");
 		ret = -ENODEV;
 		goto out_release_chan;
 	}
 
-	/* Fixed memory */
-	fixmem_dev = test_rmem_alloc_fix_memory(dev, chan_dev, "test-rmem-fixed", 1);
-	if (!fixmem_dev) {
-		dev_err(dev, "No memory-region found for index 1\n");
-		ret = -ENODEV;
-		goto out_unreg_rsvmem;
-	}
-
-	src_addr = dma_alloc_coherent(rsvmem_dev, len, &src_paddr, GFP_KERNEL);
+	src_addr = devm_kmalloc(dev, len, GFP_KERNEL);
 	if (!src_addr) {
 		ret = -ENOMEM;
 		goto out_unreg_fixmem;
 	}
 
-	dst_addr = dma_alloc_coherent(rsvmem_dev, len, &dst_paddr, GFP_KERNEL);
+	dst_addr = devm_kmalloc(dev, len, GFP_KERNEL);
 	if (!dst_addr) {
 		ret = -ENOMEM;
 		goto out_free_src;
@@ -181,8 +173,23 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	/* init for test DMA */
 	test_memory_init(src_addr, fixmem_addr, dst_addr, len);
 
+	src_paddr = dma_map_single(dev, src_addr, len, DMA_TO_DEVICE);
+	ret = dma_mapping_error(dev, src_paddr);
+	if (ret) {
+		dev_err(dev, "Failed to map src (%d)\n", ret);
+		goto test_dma_exit;
+	}
+
+	dst_paddr = dma_map_single(dev, dst_addr, len, DMA_FROM_DEVICE);
+	if (ret) {
+		dev_err(dev, "Failed to map dst (%d)\n", ret);
+		goto test_dma_exit;
+	}
+
 	/* test DMA src->fix */
+	dma_sync_single_for_device(dev, src_paddr, len, DMA_TO_DEVICE);
 	ret = test_memcpy_dma(chan, fixmem_paddr, src_paddr, len);
+	dma_sync_single_for_cpu(dev, src_paddr, len, DMA_TO_DEVICE);
 	if (ret) {
 		dev_err(dev, "Failed to transfer src->fix\n");
 		goto test_dma_exit;
@@ -193,7 +200,9 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 		 (crc1 == crc2) ? "OK" : "NG");
 
 	/* test DMA fix->dst */
+	dma_sync_single_for_device(dev, dst_paddr, len, DMA_FROM_DEVICE);
 	ret = test_memcpy_dma(chan, dst_paddr, fixmem_paddr, len);
+	dma_sync_single_for_cpu(dev, dst_paddr, len, DMA_FROM_DEVICE);
 	if (ret) {
 		dev_err(dev, "Failed to transfer fix->dst\n");
 		goto test_dma_exit;
@@ -204,6 +213,8 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 		 (crc1 == crc2) ? "OK" : "NG");
 
  test_dma_exit:
+	dma_unmap_single(dev, dst_paddr, len, DMA_FROM_DEVICE);
+	dma_unmap_single(dev, src_paddr, len, DMA_TO_DEVICE);
 
 	if (!(test_type & 2))
 		goto test_cpu_exit;
@@ -228,13 +239,11 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 test_cpu_exit:
 	dma_free_coherent(fixmem_dev, len, fixmem_addr, fixmem_paddr);
 out_free_dst:
-	dma_free_coherent(rsvmem_dev, len, dst_addr, dst_paddr);
+	devm_kfree(dev, dst_addr);
 out_free_src:
-	dma_free_coherent(rsvmem_dev, len, src_addr, src_paddr);
+	devm_kfree(dev, src_addr);
 out_unreg_fixmem:
 	test_rmem_free_fix_memory(fixmem_dev);
-out_unreg_rsvmem:
-	test_rmem_free_fix_memory(rsvmem_dev);
 out_release_chan:
 	dma_release_channel(chan);
 
