@@ -28,52 +28,6 @@ MODULE_PARM_DESC(test_type, "Type of test (1=dma only, 2=cpu only, 3=both");
 #define dmaengine_get_dma_device(c) ((c)->device->dev)
 #endif
 
-static void test_rmem_release_fix_memory(struct device *child)
-{
-	of_reserved_mem_device_release(child);
-}
-
-static struct device *test_rmem_alloc_fix_memory(struct device *dev,
-						 struct device *chan_dev, const char *name,
-						 unsigned int idx)
-{
-	struct device *child;
-	int ret;
-
-	child = devm_kzalloc(dev, sizeof(*child), GFP_KERNEL);
-	if (!child)
-		return NULL;
-
-	device_initialize(child);
-	dev_set_name(child, "%s:%s", dev_name(chan_dev), name);
-	child->parent = chan_dev;
-	child->coherent_dma_mask = chan_dev->coherent_dma_mask;
-	child->dma_mask = chan_dev->dma_mask;
-	child->release = test_rmem_release_fix_memory;
-
-	child->dma_parms = devm_kzalloc(dev, sizeof(*child->dma_parms),
-					GFP_KERNEL);
-	if (!child->dma_parms)
-		goto out;
-
-	if (!device_add(child)) {
-		ret = of_reserved_mem_device_init_by_idx(child, dev->of_node, idx);
-		if (!ret)
-			return child;
-		device_del(child);
-	}
-out:
-	put_device(child);
-
-	return NULL;
-}
-
-static void test_rmem_free_fix_memory(struct device *dev)
-{
-	of_reserved_mem_device_release(dev);
-	device_unregister(dev);
-}
-
 static int test_memcpy_dma(struct dma_chan *chan,
 			   dma_addr_t dst, dma_addr_t src, size_t len)
 {
@@ -120,7 +74,7 @@ static void test_memory_init(u32 *src, u32 *fix, u32 *dst, int len)
 static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device *chan_dev, *fixmem_dev;
+	struct device *chan_dev;
 	struct dma_chan *chan;
 	void *src_addr, *fixmem_addr, *dst_addr;
 	dma_addr_t src_paddr, fixmem_paddr, dst_paddr;
@@ -142,10 +96,9 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	chan_dev = dmaengine_get_dma_device(chan);
 
 	/* Fixed memory */
-	fixmem_dev = test_rmem_alloc_fix_memory(dev, chan_dev, "test-rmem-fixed", 0);
-	if (!fixmem_dev) {
+	ret = of_reserved_mem_device_init_by_idx(dev, dev->of_node, 0);
+	if (ret) {
 		dev_err(dev, "No memory-region found for index 0\n");
-		ret = -ENODEV;
 		goto out_release_chan;
 	}
 
@@ -161,7 +114,7 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 		goto out_free_src;
 	}
 
-	fixmem_addr = dma_alloc_coherent(fixmem_dev, len, &fixmem_paddr, GFP_KERNEL);
+	fixmem_addr = dma_alloc_coherent(dev, len, &fixmem_paddr, GFP_KERNEL);
 	if (!fixmem_addr) {
 		ret = -ENOMEM;
 		goto out_free_dst;
@@ -237,13 +190,13 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 		 (crc1 == crc2) ? "OK" : "NG");
 
 test_cpu_exit:
-	dma_free_coherent(fixmem_dev, len, fixmem_addr, fixmem_paddr);
+	dma_free_coherent(dev, len, fixmem_addr, fixmem_paddr);
 out_free_dst:
 	devm_kfree(dev, dst_addr);
 out_free_src:
 	devm_kfree(dev, src_addr);
 out_unreg_fixmem:
-	test_rmem_free_fix_memory(fixmem_dev);
+	of_reserved_mem_device_release(dev);
 out_release_chan:
 	dma_release_channel(chan);
 
