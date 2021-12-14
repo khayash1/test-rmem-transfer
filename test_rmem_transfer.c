@@ -181,14 +181,14 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	memcpy(fixmem_addr, src_addr, len);
 	crc1 = crc32_le(0, src_addr, len);
 	crc2 = crc32_le(0, fixmem_addr, len);
-	dev_info(dev, "CPU: src:%llx -> fix:%llx %s\n", src_paddr, fixmem_paddr,
+	dev_info(dev, "CPU: src:%px -> fix:%px %s\n", src_addr, fixmem_addr,
 		 (crc1 == crc2) ? "OK" : "NG");
 
 	/* test CPU fix->dst */
 	memcpy(dst_addr, fixmem_addr, len);
 	crc1 = crc32_le(0, fixmem_addr, len);
 	crc2 = crc32_le(0, dst_addr, len);
-	dev_info(dev, "CPU: fix:%llx -> dst:%llx %s\n", fixmem_paddr, dst_paddr,
+	dev_info(dev, "CPU: fix:%px -> dst:%px %s\n", fixmem_addr, dst_addr,
 		 (crc1 == crc2) ? "OK" : "NG");
 
 test_cpu_exit:
