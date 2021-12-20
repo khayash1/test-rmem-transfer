@@ -79,6 +79,7 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 	void *src_addr, *fixmem_addr, *dst_addr;
 	dma_addr_t src_paddr, fixmem_paddr, dst_paddr;
 	dma_cap_mask_t mask;
+	unsigned long attrs;
 	size_t len = test_buf_size;
 	u32 crc1, crc2;
 	int ret = 0;
@@ -114,7 +115,8 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 		goto out_free_src;
 	}
 
-	fixmem_addr = dma_alloc_coherent(chan_dev, len, &fixmem_paddr, GFP_KERNEL);
+	attrs = DMA_ATTR_FORCE_CONTIGUOUS;
+	fixmem_addr = dma_alloc_attrs(chan_dev, len, &fixmem_paddr, GFP_KERNEL, attrs);
 	if (!fixmem_addr) {
 		ret = -ENOMEM;
 		goto out_free_dst;
@@ -192,7 +194,7 @@ static int test_rmem_trasnfer_probe(struct platform_device *pdev)
 		 (crc1 == crc2) ? "OK" : "NG");
 
 test_cpu_exit:
-	dma_free_coherent(chan_dev, len, fixmem_addr, fixmem_paddr);
+	dma_free_attrs(chan_dev, len, fixmem_addr, fixmem_paddr, attrs);
 out_free_dst:
 	devm_kfree(dev, dst_addr);
 out_free_src:
